@@ -1,0 +1,1 @@
+Create base mri project for scanning MRI images. 
