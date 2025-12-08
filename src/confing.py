@@ -6,4 +6,4 @@ DATA_RAW_DIR = PROJECT_ROOT / "data" / "raw"
 METADATA_DIR = PROJECT_ROOT / "metadata"
 METADATA_DIR.mkdir(exist_ok=True)
 
-TARGET_SIZE = (256, 256)
+TARGET_SIZE = 256
