@@ -2,7 +2,7 @@
 import os 
 import pandas as pd
 from pathlib import Path
-from src.confing import DATA_RAW_DIR, METADATA_DIR
+from src.utils.config import DATA_RAW_DIR, METADATA_DIR
 
 def make_metadata():
     rows = []

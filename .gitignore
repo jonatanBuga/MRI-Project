@@ -1,3 +1,19 @@
+# Raw and labeled data (not tracked)
 data/raw/
 data/roboflow_coco/
 data/masks_raw/
+data/masks_processed/
+
+# Metadata generated from data
+metadata/*.csv
+metadata/*.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

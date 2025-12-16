@@ -1,0 +1,19 @@
+name: mri-seg
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy<2.0
+  - pandas
+  - opencv
+  - pillow
+  - matplotlib
+  - scikit-image
+  - tqdm
+  - pyyaml
+  - pyarrow
+  - pytorch
+  - torchvision
+  - jupyterlab
