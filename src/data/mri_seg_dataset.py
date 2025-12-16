@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from utils.config import TARGET_SIZE
+from src.utils.config import TARGET_SIZE
 
 
 def _infer_repo_root_from_here() -> Path:
@@ -70,7 +70,7 @@ class MRISegmentationDataset:
     """
     Stage 0/1 dataset: indexes Roboflow image/mask pairs from a labeled metadata CSV.
 
-    - Reads metadata/metadata_labeled_roboflow.csv (repo-root-relative paths)
+    - Reads metadata (repo-root-relative paths)
     - Builds self.samples (stable order = CSV order)
 
     Stage 2: image/mask loading/preprocessing is introduced (torch + transforms) in __getitem__ only,
@@ -79,9 +79,10 @@ class MRISegmentationDataset:
 
     def __init__(
         self,
-        metadata_csv: str = "metadata/metadata_labeled_roboflow.csv",
+        metadata_csv: str = "metadata/metadata_labeled_roboflow_all.csv",
         project_root: Optional[Union[str, Path]] = None,
         mode: str = "labeled_only",
+        split: Optional[str] = None,
     ) -> None:
         self.project_root = Path(project_root) if project_root is not None else _infer_repo_root_from_here()
         self.metadata_csv = (self.project_root / metadata_csv).resolve()
@@ -89,6 +90,10 @@ class MRISegmentationDataset:
         if mode not in {"labeled_only", "mixed"}:
             raise ValueError(f"mode must be 'labeled_only' or 'mixed', got: {mode!r}")
         self.mode = mode
+
+        if split not in {None, "train", "val", "test"}:
+            raise ValueError(f"split must be one of None/'train'/'val'/'test', got: {split!r}")
+        self.split = split
 
         if not self.metadata_csv.exists():
             raise FileNotFoundError(f"Metadata CSV not found: {self.metadata_csv.as_posix()}")
@@ -104,11 +109,19 @@ class MRISegmentationDataset:
             if reader.fieldnames is None:
                 raise ValueError(f"Metadata CSV has no header: {self.metadata_csv.as_posix()}")
 
-            missing = required_cols.difference(set(reader.fieldnames))
+            fieldnames = set(reader.fieldnames)
+            missing = required_cols.difference(fieldnames)
             if missing:
                 raise ValueError(
                     f"Metadata CSV missing required columns {sorted(missing)}. "
                     f"Found: {reader.fieldnames}. File: {self.metadata_csv.as_posix()}"
+                )
+
+            has_split_col = "split" in fieldnames
+            if not has_split_col and self.split not in {None, "train"}:
+                raise ValueError(
+                    "This metadata CSV has no 'split' column, so only split=None or split='train' is allowed. "
+                    f"Got split={self.split!r}. File: {self.metadata_csv.as_posix()}"
                 )
 
             for i, row in enumerate(reader):
@@ -120,6 +133,11 @@ class MRISegmentationDataset:
                 # Basic guard: skip rows with no image path
                 if not image_rel:
                     continue
+
+                row_split = (row.get("split") or "").strip() if has_split_col else "train"
+                if self.split is not None:
+                    if row_split != self.split:
+                        continue
 
                 # Filtering rules
                 if self.mode == "labeled_only":
@@ -146,6 +164,7 @@ class MRISegmentationDataset:
                         "meta": {
                             "source": "roboflow",
                             "row_index": i,
+                            "split": row_split,
                         },
                     }
                 )
@@ -163,7 +182,7 @@ class MRISegmentationDataset:
         # Stage 2 (step 1): load + preprocess the image using existing pipeline.
         # Import here to avoid importing torch / image libs at module import time.
         try:
-            from data.transforms import preprocess_image  # type: ignore
+            from src.data.transforms import preprocess_image  # type: ignore
         except Exception as e:  # pragma: no cover
             raise ImportError(
                 "Failed to import preprocess_image from src/data/transforms.py. "
@@ -193,6 +212,7 @@ class MRISegmentationDataset:
             {
                 "source": "roboflow",
                 "row_index": int(meta.get("row_index", index)),
+                "split": str(meta.get("split", "train")),
                 "image_path": str(image_path),
                 "mask_path": str(mask_path),
             }
@@ -217,3 +237,29 @@ class MRISegmentationDataset:
             "with_mask": with_mask,
             "without_mask": without_mask,
         }
+
+
+if __name__ == "__main__":
+    # Smoke test for split filtering using merged Roboflow metadata.
+    import torch
+
+    ds_train = MRISegmentationDataset(split="train")
+    ds_val = MRISegmentationDataset(split="val")
+    ds_test = MRISegmentationDataset(split="test")
+
+    print("train:", len(ds_train))
+    print("val:  ", len(ds_val))
+    print("test: ", len(ds_test))
+
+    total = len(ds_train) + len(ds_val) + len(ds_test)
+    print("total:", total)
+    assert total == 825, f"Expected total=825, got {total}"
+
+    for tag, ds in [("train", ds_train), ("val", ds_val), ("test", ds_test)]:
+        if len(ds) == 0:
+            raise RuntimeError(f"{tag} split dataset is empty")
+        s = ds[0]
+        img = s["image"]
+        msk = s["mask"]
+        uniq = torch.unique(msk).cpu().tolist()
+        print(f"[{tag}] image:", tuple(img.shape), img.dtype, "mask:", tuple(msk.shape), msk.dtype, "unique:", uniq)

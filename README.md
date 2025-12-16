@@ -59,3 +59,114 @@ What the script does:
 - Runs `preprocess_image` on each sample.
 - Prints the tensor shape, dtype, and min/max values for quick verification.
 
+## Dataset & Data Pipeline (Stages 2–3)
+
+This stage establishes a robust, reproducible data pipeline for segmentation training and inference.  
+No model assumptions are made at this stage.
+
+### Labeled Metadata
+
+All labeled data is consolidated into a single CSV:
+
+- `metadata/metadata_labeled_roboflow_all.csv`
+
+Each row represents one image and contains:
+- `image_path` – path to the image
+- `mask_path` – path to the binary segmentation mask
+- `split` – one of `{train, val, test}` (fixed, Roboflow-based)
+- `has_label`, `mask_valid` – label validity flags
+
+Final dataset sizes:
+- Train: 577
+- Validation: 169
+- Test: 79
+- Total: 825
+
+The split is fixed and deterministic, ensuring full reproducibility across runs.
+
+### Segmentation Dataset
+
+Implemented in:
+- `src/data/mri_seg_dataset.py`
+
+`MRISegmentationDataset`:
+- Loads image–mask pairs from the metadata CSV
+- Applies the same preprocessing pipeline used throughout the project
+- Converts masks to strict binary format `{0,1}`
+- Supports filtering by split (`train`, `val`, `test`)
+- Returns a standardized sample:
+  ```python
+  {
+    "image": Tensor[C, H, W],
+    "mask":  Tensor[H, W],
+    "meta":  dict
+  }
+  ```
+
+Sanity checks performed:
+- Image and mask spatial alignment
+- Mask binarization
+- Tensor dtype and shape consistency
+
+### DataLoaders
+
+Implemented in:
+- `src/data/dataloaders.py`
+
+Key design decisions:
+- Custom `collate_fn` to safely batch tensors while keeping metadata intact
+
+Final batch format:
+- `image`: `[B, 3, H, W]`, `float32`
+- `mask`: `[B, 1, H, W]`, `float32`
+- `meta`: `list` of `dict` (one per sample)
+
+Train loader:
+- `shuffle=True`
+- `drop_last=True`
+
+Validation/Test loaders:
+- `shuffle=False`
+- `drop_last=False`
+
+### Performance Benchmark
+
+A dedicated benchmark script was used to measure DataLoader throughput:
+- `scripts/benchmark_dataloader.py`
+
+Results showed a clear CPU bottleneck with a single worker. Recommended defaults (based on empirical measurement):
+- `batch_size = 8`
+- `num_workers = 4`
+- `pin_memory = True`
+- `persistent_workers = True`
+
+These settings are now the project defaults.
+
+### Inference-Only Dataset
+
+Implemented in:
+- `src/data/mri_inference_dataset.py`
+
+`MRIInferenceDataset` is a lightweight dataset designed for model inference only:
+- Loads images without requiring labels or masks
+- Uses the exact same preprocessing pipeline as training
+- Can be initialized from:
+  - an explicit list of image paths, or
+  - a root directory (recursively scanned)
+
+Returns:
+```python
+{
+  "image": Tensor[C, H, W],
+  "meta": {
+    "image_path": str,
+    "index": int
+  }
+}
+```
+
+Key properties:
+- Stable, sorted ordering of images (reproducible inference)
+- No dependency on metadata CSVs
+- Suitable for test-time inference, external datasets, and qualitative evaluation
+
