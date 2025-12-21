@@ -17,3 +17,28 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Inference & training outputs
+outputs/
+
+# Model checkpoints & weights
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Hugging Face cache
+.hf_cache/
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# OS
+.DS_Store

@@ -224,3 +224,87 @@ All models are compared using the same metrics, threshold, and evaluation protoc
 - Fixed data split
 - Identical preprocessing and normalization
 - Identical loss functions and evaluation metrics across models
+
+## Model Integration & Inference (Day 1)
+
+This Stage transitions from a finalized data layer (Stages 1–3) to **model integration, training, and evaluation**.
+
+### 1) Purpose 
+
+The objective is to verify that multiple segmentation architectures can be executed end-to-end within the same pipeline:
+
+- **No training or fine-tuning** is performed.
+- A strict **sanity check** is conducted for:
+  - input/output tensor compatibility,
+  - execution on available devices (CPU / GPU / MPS),
+  - correct probability generation (sigmoid),
+  - correct artifact export (PNG outputs).
+- Ensures that all candidate models conform to the project’s **unified data + inference interface**, so subsequent benchmarking reflects model quality rather than integration differences.
+
+### 2) Unified Model Interface
+
+All integrated models follow the same interface (slice-wise 2D segmentation; no 3D context):
+
+- **Input**: MRI slices as 2D tensors  
+  `image`: `[B, 3, H, W]`, `float32`, normalized to `[0, 1]`
+- **Output**: binary segmentation predictions  
+  `logits`: `[B, 1, H, W]` (pre-sigmoid)  
+  `probs = sigmoid(logits)`: `[B, 1, H, W]`, `float32`, in `[0, 1]`
+
+This standardization enables consistent downstream post-processing, visualization, and evaluation across architectures.
+
+### 3) Models Integrated 
+
+Three model families were integrated and validated via inference-only runs:
+
+- **UNet + ResNet-50 encoder (CNN baseline)**  
+  - Loaded via `segmentation_models_pytorch.Unet`  
+  - Encoder: `resnet50`, ImageNet pretrained weights  
+  - Inference-only (no task-specific adaptation)
+
+- **TransUNet (R50-ViT-B_16 hybrid CNN–Transformer)**  
+  - Loaded from the official TransUNet codebase vendored locally under `third_party/transunet/`  
+  - Wrapped in `src/models/transunet_wrapper.py` to enforce the unified output contract  
+  - Inference-only (no task-specific adaptation)
+
+- **SegFormer (Transformer-based; Hugging Face Transformers)**  
+  - Loaded via `transformers.SegformerForSemanticSegmentation`  
+  - Inference-only (no task-specific adaptation)
+
+### 4) Inference Protocol (Shared)
+
+All models use the same inference protocol to ensure comparable outputs:
+
+- **Dataset split**: fixed and deterministic (`train/val/test`) from:  
+  `metadata/metadata_labeled_roboflow_all.csv`
+- **Inference split**: validation set (`val`)
+- **Post-processing**:
+  - apply `sigmoid` to logits to obtain probabilities
+  - generate binary masks using a configurable threshold (default `0.5`)
+- **Saved artifacts** (for qualitative inspection):
+  - probability heatmaps: PNG encoded in `0–255`
+  - thresholded binary masks: PNG encoded in `{0, 255}`
+
+Outputs are stored per model under:
+- `outputs/inference/<model_name>/{timestamp}/`
+
+### 5) Observations (Qualitative)
+
+The goal of Integration and inference is correctness of integration rather than segmentation accuracy. Qualitative behaviors observed during inference-only runs are expected:
+
+- All architectures produce **stable probability maps** prior to training.
+- Outputs are often **centered around ~0.5** before fine-tuning, reflecting uncalibrated decision boundaries.
+- Threshold sensitivity and probability distribution can differ across model families:
+  - CNN baseline vs. hybrid CNN–Transformer vs. transformer-only behavior may vary.
+- For **SegFormer**, when configured for binary output (`num_labels=1`), a **new binary segmentation head may be initialized** (depending on how the pretrained checkpoint is adapted). This is expected prior to task-specific training and does not indicate failure.
+
+These observations confirm correct execution and output formatting, not segmentation quality.
+
+### 6) Outcome 
+
+completes the model-integration gate with the following outcomes:
+
+- [x] All three models run inference end-to-end without errors  
+- [x] Input/output shapes are consistent across architectures (`[B, 3, H, W]` → `[B, 1, H, W]`)  
+- [x] Probability and mask artifacts are generated for qualitative inspection  
+- [x] The pipeline is ready for sanity training and quantitative evaluation in subsequent days
