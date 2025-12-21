@@ -170,3 +170,57 @@ Key properties:
 - No dependency on metadata CSVs
 - Suitable for test-time inference, external datasets, and qualitative evaluation
 
+## Model Evaluation & Benchmark Protocol
+
+### Task Definition
+Binary segmentation of edema / lesion regions in mouse brain MRI slices.
+
+All models are evaluated under identical data, preprocessing, and evaluation conditions to ensure a fair and reproducible comparison.
+
+### Input & Output
+
+**Input:**
+- MRI slices as 2D images
+- Tensor shape: `[B, 3, H, W]`, `float32`
+- (Uniform resizing and intensity normalization applied to all models)
+
+**Output:**
+- Binary segmentation mask
+- Tensor shape: `[B, 1, H, W]`, values in `[0, 1]` after sigmoid
+
+### Training Setup
+- Segmentation setting: slice-wise 2D  
+  Each MRI slice is treated as an independent sample (no 3D or inter-slice context).
+
+- Training loss:  
+  Dice Loss + Binary Cross Entropy (fixed across all models)
+
+### Evaluation Protocol
+- Dataset split: fixed and deterministic (train / validation / test)
+- Evaluation split: validation set only (test set kept untouched)
+- Thresholding:  
+  Predicted probabilities are binarized using a fixed threshold of `0.5`
+- Metric computation:  
+  Metrics are computed at the epoch level, aggregating predictions over the full validation set.
+
+### Evaluation Metrics
+
+**Primary metric:**
+- Dice score (overlap between predicted and ground-truth lesion regions)
+
+**Secondary metrics:**
+- Intersection over Union (IoU)
+- Precision
+- Recall
+
+(Volume-based error metrics are planned for later stages of the study.)
+
+### Model Selection Criterion
+The best model checkpoint is selected based on the highest validation Dice score.
+
+All models are compared using the same metrics, threshold, and evaluation protocol.
+
+### Reproducibility
+- Fixed data split
+- Identical preprocessing and normalization
+- Identical loss functions and evaluation metrics across models
