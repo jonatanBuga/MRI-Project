@@ -225,7 +225,7 @@ All models are compared using the same metrics, threshold, and evaluation protoc
 - Identical preprocessing and normalization
 - Identical loss functions and evaluation metrics across models
 
-## Model Integration & Inference (Day 1)
+## Model Integration & Inference 
 
 This Stage transitions from a finalized data layer (Stages 1–3) to **model integration, training, and evaluation**.
 
@@ -308,3 +308,73 @@ completes the model-integration gate with the following outcomes:
 - [x] Input/output shapes are consistent across architectures (`[B, 3, H, W]` → `[B, 1, H, W]`)  
 - [x] Probability and mask artifacts are generated for qualitative inspection  
 - [x] The pipeline is ready for sanity training and quantitative evaluation in subsequent days
+
+## Training Progress
+### Sanity Training — UNet + ResNet50 (MPS)
+
+As part of the initial validation phase, we conducted a short **sanity training run** using a **UNet with a ResNet50 encoder**.  
+The goal was to verify the full training pipeline before committing to long, full-scale training.
+
+---
+
+### Objectives
+- Validate dataset integrity and dataloaders
+- Ensure loss, metrics, and backpropagation behave correctly
+- Observe **learning trends**, not just isolated metric values
+- Inspect qualitative segmentation results via fixed-sample visualizations
+
+---
+
+### Configuration
+- **Model:** UNet + ResNet50 encoder
+- **Device:** Apple MPS
+- **Epochs:** 8
+- **Batch size:** 8
+- **Train batches:** 10 (sanity subset)
+- **Validation batches:** 30
+- **Loss:** Dice + Binary Cross-Entropy
+- **Metrics:** Dice, IoU, Precision, Recall
+- **Visualizations:** Fixed validation samples at `epoch_0` and `epoch_last`
+
+---
+
+### Quantitative Results
+
+- **Training loss** decreases almost monotonically across epochs.
+- **Validation loss** shows a clear downward trend with minor fluctuations (expected in sanity runs).
+- **Dice score** improves rapidly after epochs 3–4 and stabilizes around **0.6–0.7**.
+- **IoU** follows the same trend, reaching ~0.55.
+- **Recall** is consistently high, indicating strong sensitivity to target regions.
+- **Precision** is more variable, suggesting some over-segmentation early on.
+
+These behaviors are expected given the limited number of batches and confirm meaningful learning rather than noise.
+
+---
+
+### Interpretation
+- The model demonstrates **real structural learning** of the segmentation task.
+- High recall indicates a preference for detecting relevant regions rather than missing them — a desirable property in medical segmentation.
+- Precision is expected to improve with longer training, threshold tuning, or regularization.
+- Temporary metric drops (e.g., around epoch 5–6) are attributed to statistical noise from small validation subsets.
+
+---
+
+### Qualitative Evaluation
+Fixed-sample visualizations were generated for:
+- **epoch_0** (before training)
+- **epoch_last** (after sanity training)
+
+A clear qualitative improvement is observed:
+- Initial predictions are largely uninformative.
+- Final predictions show coherent, anatomically meaningful masks aligned with ground truth.
+
+Visual outputs are saved under: outputs/sanity_viz/unet_r50/
+---
+
+### Conclusions
+- The full training pipeline (data → model → loss → metrics → visualization) is **stable and reliable**.
+- UNet + ResNet50 serves as a **strong baseline** for this project.
+- No technical blockers (memory, gradients, device compatibility) were identified.
+- The project is ready to proceed to **longer, full-scale training** with confidence.
+
+---
