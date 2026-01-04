@@ -3,6 +3,7 @@ data/raw/
 data/roboflow_coco/
 data/masks_raw/
 data/masks_processed/
+data/healthy_samples/
 
 # Metadata generated from data
 metadata/*.csv

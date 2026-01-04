@@ -377,4 +377,9 @@ Visual outputs are saved under: outputs/sanity_viz/unet_r50/
 - No technical blockers (memory, gradients, device compatibility) were identified.
 - The project is ready to proceed to **longer, full-scale training** with confidence.
 
+
+### Evaluation on Healthy Controls
+To evaluate robustness and false-positive behavior, the baseline model was applied to MRI scans of healthy mice.
+Across all samples, the model exhibited consistently low activation, with mean predicted probabilities in the range of ~0.005-0.008 and fewer than 0.5% of pixels exceeding the segmentation threshold. While isolated pixels occasionally reached high confidence values, no spatially consistent or anatomically plausible lesion patterns were observed.
+Overall, this indicates that the baseline model does not hallucinate edema like regions on healthy scans and demonstrates stable behavior on out of distribution data.
 ---
