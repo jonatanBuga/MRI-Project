@@ -404,8 +404,8 @@ Given a 3D MRI volume (`.nii`) with multiple axial slices of a single mouse at a
 6. Computes lesion volume in **mm³** and **µm³**  
 
 This allows direct comparison of lesion volumes across:
-- Different animals
-- Multiple timepoints (e.g. 24h, 48h, 1 week, etc.)
+- Different patiens
+- Multiple timepoints 
 - Different experimental or treatment groups
 
 ---
@@ -508,7 +508,7 @@ outputs/quantification/<nii_stem>/
 
 Activate environment:
 ```bash
-conda activate mri-seg-v2
+conda activate YOUR-ENV-NAME
 ``` 
 Run quantification:
 python scripts/run_unet_r50_nifti_quantification.py \
