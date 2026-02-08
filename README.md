@@ -384,3 +384,135 @@ Visual outputs are saved under: outputs/sanity_viz/unet_r50/
   Overall, this indicates that the baseline model does not hallucinate edema like regions on healthy scans and demonstrates stable behavior on out of distribution data.
 
 ---
+## Lesion / Edema Quantification from NIfTI (MRI)
+
+This section describes the **end-to-end inference and volume quantification pipeline** used to compute lesion / edema volumes from 3D MRI scans stored in **NIfTI (`.nii`) format**, using a trained **UNet with ResNet50 encoder**.
+
+The pipeline bridges the gap between **slice-wise segmentation** and **biologically meaningful 3D volume measurements**.
+
+---
+
+### Overview
+
+Given a 3D MRI volume (`.nii`) with multiple axial slices of a single mouse at a specific timepoint, the pipeline:
+
+1. Loads the NIfTI volume and extracts voxel spacing from metadata  
+2. Applies volume-level intensity normalization  
+3. Runs slice-wise segmentation using a trained UNet-ResNet50 model  
+4. Reconstructs a full 3D binary lesion mask  
+5. Applies 3D connected-component filtering to remove small false positives  
+6. Computes lesion volume in **mm³** and **µm³**  
+
+This allows direct comparison of lesion volumes across:
+- Different animals
+- Multiple timepoints (e.g. 24h, 48h, 1 week, etc.)
+- Different experimental or treatment groups
+
+---
+
+### Input
+
+- **NIfTI file (`.nii`)**
+  - Represents a single animal at a single timepoint
+  - Shape: `(H, W, Z)` where `Z` is the number of slices
+  - Must include valid voxel spacing in the header (`pixdim`)
+- **Trained model checkpoint**
+  - UNet with ResNet50 encoder
+  - Saved in the following format:
+    ```python
+    {
+      "model": state_dict,
+      "epoch": int,
+      "best_dice": float
+    }
+    ```
+
+---
+
+### Preprocessing
+
+1. **Volume-level percentile normalization**
+   - Applied across the entire 3D volume (e.g. p1–p99)
+   - Improves slice-to-slice consistency and inference stability
+
+2. **Slice-wise preprocessing**
+   - Each slice is resized to `256 × 256`
+   - Grayscale slices are expanded to 3 channels
+   - Intensity values are normalized to `[0, 1]`
+
+---
+
+### Model Inference
+
+- Inference is performed **slice by slice**
+- Sigmoid activation is applied to logits
+- A fixed threshold (default `0.5`) converts probabilities to a binary mask
+- Masks are resized back to the original spatial resolution
+
+Supported devices:
+- **Apple Silicon (MPS)** when available
+- CPU fallback otherwise
+
+---
+
+### 3D Post-processing
+
+After reconstructing the full `(H, W, Z)` mask:
+
+- **3D connected component analysis** is applied
+- Small isolated components are removed
+- Only components with at least `min_voxels` (default: `30`) are kept
+
+This step significantly reduces noise-driven false positives.
+
+---
+
+### Volume Quantification
+
+Lesion volume is computed using the voxel-based formula:
+
+num_voxels = sum(mask)
+voxel_volume = x_res × y_res × z_res (mm³)
+lesion_volume = num_voxels × voxel_volume
+
+Reported metrics:
+- Total lesion voxels
+- Voxel volume (mm³)
+- Lesion volume (mm³)
+- Lesion volume (µm³)
+
+---
+### Output Structure
+
+For each input NIfTI file, the pipeline creates:
+outputs/quantification/<nii_stem>/
+├── pred_mask_3d.npy
+├── pred_mask_slices_png/
+│ ├── slice_000_mask.png
+│ ├── slice_001_mask.png
+│ └── ...
+└── volume_metrics.json
+
+
+#### Output files
+- **`pred_mask_3d.npy`**  
+  Binary 3D mask `(H, W, Z)` in original resolution
+- **`pred_mask_slices_png/`**  
+  One PNG mask per slice for visual inspection
+- **`volume_metrics.json`**  
+  Contains spacing, voxel counts, volumes, and run metadata
+
+---
+
+### How to Run (Single NIfTI)
+
+Activate environment:
+```bash
+conda activate mri-seg-v2
+``` 
+Run quantification:
+python scripts/run_unet_r50_nifti_quantification.py \
+  --nii_path PATH/TO/VOLUME.nii \
+  --ckpt_path outputs/training/baseline_full_v2/checkpoints/best_by_val_dice.pt \
+  --thr 0.5 \
+  --out_dir outputs/quantification
